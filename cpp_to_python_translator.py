@@ -1,0 +1,275 @@
+import re
+import sys
+
+class CppToPythonTranslator:
+    """
+    A class to translate C++ code to Python code.
+    This is a simplified translator and works for a subset of C++.
+    """
+
+    def __init__(self, cpp_code):
+        self.cpp_code = cpp_code
+        self.python_code = ""
+
+    def _remove_arg_types(self, match):
+        args = match.group(3)
+        # Remove types from arguments, e.g., "int n, string s" -> "n, s"
+        processed_args = re.sub(r'\b(int|double|float|string|bool)\s+', '', args)
+        return f"def {match.group(2)}({processed_args}):"
+
+    def translate(self):
+        code = self.cpp_code
+        code = re.sub(r'}\s*else', '}\nelse', code)
+        lines = code.split('\n')
+        processed_lines = []
+        for line in lines:
+            line = line.strip()
+            if not line:
+                continue
+
+            # Comments
+            line = re.sub(r'//(.*)', r'#\1', line)
+            if '/*' in line or '*/' in line:
+                # Basic multi-line comment handling, not perfect
+                line = re.sub(r'/\*.*?\*/', '"""', line)
+
+            # Includes and using namespace
+            if '#include' in line or 'using namespace' in line:
+                continue
+
+            # main
+            line = re.sub(r'int main\s*\(.*\)\s*{', 'def main():', line)
+
+            # Functions
+            line = re.sub(r'(\w+)\s+(\w+)\s*\((.*?)\)\s*{', self._remove_arg_types, line)
+
+            # Control Structures
+            line = re.sub(r'for\s*\(\s*int\s+([a-zA-Z_]\w*)\s*=\s*(\d+);\s*\1\s*<\s*(\w+);\s*(?:\1\+\+|\+\+\1)\s*\)\s*{', r'for \1 in range(\2, \3):', line)
+            line = re.sub(r'while\s*\((.*?)\)\s*{', r'while \1:', line)
+            line = re.sub(r'if\s*\((.*?)\)\s*{', r'if \1:', line)
+            line = re.sub(r'else if\s*\((.*?)\)\s*{', r'elif \1:', line)
+            line = re.sub(r'else\s*{', 'else:', line)
+
+            # IO
+            line = re.sub(r'std::cout\s*<<\s*(.*?)\s*<<\s*std::endl\s*;', r'print(\1)', line)
+            line = re.sub(r'std::cout\s*<<\s*(.*?)\s*;', r'print(\1)', line)
+
+            # Type declarations
+            line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*)\s*=', r'\2 =', line)
+            line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*);', r'\2 = None', line)
+
+            # Operators
+            line = re.sub(r'&&', 'and', line)
+            line = re.sub(r'\|\|', 'or', line)
+            line = re.sub(r'true', 'True', line)
+            line = re.sub(r'false', 'False', line)
+
+            # Semicolons
+            line = re.sub(r';', '', line)
+
+            processed_lines.append(line)
+
+        # Indentation
+        indented_code = []
+        indent_level = 0
+        for line in processed_lines:
+            stripped = line.strip()
+            if not stripped:
+                continue
+
+            if stripped == '}':
+                indent_level = max(0, indent_level - 1)
+                continue
+
+            if stripped.endswith('}'):
+                indent_level = max(0, indent_level - 1)
+                stripped = stripped[:-1].strip()
+
+            if stripped:
+                if stripped.startswith('def ') and indented_code:
+                    indented_code.append('')
+                indented_code.append('    ' * indent_level + stripped)
+
+            if stripped.endswith(':'):
+                indent_level += 1
+
+        final_code = '\n'.join(indented_code)
+
+        # Add main guard
+        if 'def main():' in final_code:
+            final_code += '\n\nif __name__ == "__main__":\n    main()'
+
+        self.python_code = final_code.strip()
+        return self.python_code
+
+def run_tests():
+    """
+    Runs a series of test cases to verify the translator's functionality.
+    """
+    test_cases = [
+        {
+            "name": "Hello World",
+            "cpp": """\
+#include <iostream>
+
+int main() {
+    std::cout << "Hello, World!" << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    print("Hello, World!")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        # More test cases will be added here.
+        {
+            "name": "If-Else statement",
+            "cpp": """\
+#include <iostream>
+
+int main() {
+    int x = 10;
+    if (x > 5) {
+        std::cout << "x is greater than 5" << std::endl;
+    } else {
+        std::cout << "x is not greater than 5" << std::endl;
+    }
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    x = 10
+    if x > 5:
+        print("x is greater than 5")
+    else:
+        print("x is not greater than 5")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "For loop",
+            "cpp": """\
+#include <iostream>
+
+int main() {
+    for (int i = 0; i < 5; ++i) {
+        std::cout << i << std::endl;
+    }
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    for i in range(0, 5):
+        print(i)
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "While loop",
+            "cpp": """\
+#include <iostream>
+
+int main() {
+    int i = 0;
+    while (i < 5) {
+        std::cout << i << std::endl;
+        i = i + 1;
+    }
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    i = 0
+    while i < 5:
+        print(i)
+        i = i + 1
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "Factorial Function",
+            "cpp": """\
+#include <iostream>
+
+int factorial(int n) {
+    if (n <= 1) {
+        return 1;
+    }
+    return n * factorial(n - 1);
+}
+
+int main() {
+    std::cout << factorial(5) << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+def factorial(n):
+    if n <= 1:
+        return 1
+    return n * factorial(n - 1)
+
+def main():
+    print(factorial(5))
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        }
+    ]
+
+    print("Running translator tests...")
+    all_passed = True
+    for i, test_case in enumerate(test_cases):
+        print(f"--- Test Case {i+1}: {test_case['name']} ---")
+        translator = CppToPythonTranslator(test_case["cpp"])
+        actual_python = translator.translate()
+        expected_python = test_case["python"]
+
+        print("C++ Input:")
+        print(test_case["cpp"])
+        print("\\nExpected Python Output:")
+        print(expected_python)
+        print("\\nActual Python Output:")
+        print(actual_python)
+
+        if actual_python.strip() == expected_python.strip():
+            print("\\nResult: PASSED")
+        else:
+            print("\\nResult: FAILED")
+            all_passed = False
+        print("--------------------------------" + "-" * len(test_case['name']))
+
+    print("\\n--- Test Summary ---")
+    if all_passed:
+        print("All tests passed!")
+    else:
+        print("Some tests failed.")
+    print("--------------------")
+
+
+if __name__ == "__main__":
+    if len(sys.argv) > 1 and sys.argv[1] == 'test':
+        run_tests()
+    else:
+        # This part will be for translating a file if needed, but for now, we'll just run tests.
+        print("Running tests by default.")
+        run_tests()
