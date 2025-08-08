@@ -10,6 +10,7 @@ class CppToPythonTranslator:
     def __init__(self, cpp_code):
         self.cpp_code = cpp_code
         self.python_code = ""
+        self.used_math = False
 
     def _remove_arg_types(self, match):
         args = match.group(3)
@@ -21,6 +22,18 @@ class CppToPythonTranslator:
         code = self.cpp_code
         code = re.sub(r'}\s*else', '}\nelse', code)
         lines = code.split('\n')
+
+        # Pre-process for const
+        new_lines = []
+        for line in lines:
+            stripped_line = line.strip()
+            if stripped_line.startswith('const '):
+                new_lines.append('# const')
+                new_lines.append(stripped_line.replace('const ', '', 1))
+            else:
+                new_lines.append(line)
+        lines = new_lines
+
         processed_lines = []
         for line in lines:
             line = line.strip()
@@ -55,10 +68,32 @@ class CppToPythonTranslator:
             line = re.sub(r'std::cout\s*<<\s*(.*?)\s*;', r'print(\1)', line)
 
             # Type declarations
+            line = re.sub(r'std::vector<.*?>\s+(\w+);', r'\1 = []', line)
+            line = re.sub(r'std::pair<.*?>\s+(\w+);', r'\1 = (None, None)', line)
             line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*)\s*=', r'\2 =', line)
             line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*);', r'\2 = None', line)
 
+            # Math functions
+            math_map = {
+                'expf': 'math.exp',
+                'fmaxf': 'math.fmax',
+                'fminf': 'math.fmin',
+                'sqrtf': 'math.sqrt',
+            }
+            for cpp_func, py_func in math_map.items():
+                if cpp_func in line:
+                    line = re.sub(r'\b' + cpp_func + r'\b', py_func, line)
+                    self.used_math = True
+
             # Operators
+            line = re.sub(r'\.push_back\((.*?)\)', r'.append(\1)', line)
+            line = re.sub(r'(\w+)\.size\(\)', r'len(\1)', line)
+            line = re.sub(r'std::make_pair\((.*?)\)', r'(\1)', line)
+            line = re.sub(r'\.first', '[0]', line)
+            line = re.sub(r'\.second', '[1]', line)
+            line = re.sub(r'->', '.', line)
+            line = re.sub(r'std::min\((.*?)\)', r'min(\1)', line)
+            line = re.sub(r'std::max\((.*?)\)', r'max(\1)', line)
             line = re.sub(r'&&', 'and', line)
             line = re.sub(r'\|\|', 'or', line)
             line = re.sub(r'true', 'True', line)
@@ -99,6 +134,9 @@ class CppToPythonTranslator:
         if 'def main():' in final_code:
             final_code += '\n\nif __name__ == "__main__":\n    main()'
 
+        if self.used_math:
+            final_code = 'import math\n\n' + final_code
+
         self.python_code = final_code.strip()
         return self.python_code
 
@@ -120,6 +158,101 @@ int main() {
             "python": """\
 def main():
     print("Hello, World!")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "std::vector",
+            "cpp": """\
+#include <iostream>
+#include <vector>
+
+int main() {
+    std::vector<int> my_vector;
+    my_vector.push_back(10);
+    my_vector.push_back(20);
+    std::cout << my_vector[0] << std::endl;
+    std::cout << my_vector.size() << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    my_vector = []
+    my_vector.append(10)
+    my_vector.append(20)
+    print(my_vector[0])
+    print(len(my_vector))
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "std::pair",
+            "cpp": """\
+#include <iostream>
+#include <utility>
+
+int main() {
+    std::pair<int, int> my_pair;
+    my_pair = std::make_pair(10, 20);
+    std::cout << my_pair.first << std::endl;
+    std::cout << my_pair.second << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    my_pair = (None, None)
+    my_pair = (10, 20)
+    print(my_pair[0])
+    print(my_pair[1])
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "Arrow operator",
+            "cpp": """\
+int main() {
+    my_object->do_something();
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    my_object.do_something()
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "Math functions",
+            "cpp": """\
+#include <iostream>
+#include <cmath>
+
+int main() {
+    double x = 2.0;
+    std::cout << expf(x) << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+import math
+
+def main():
+    x = 2.0
+    print(math.exp(x))
     return 0
 
 if __name__ == "__main__":
@@ -228,6 +361,33 @@ def factorial(n):
 
 def main():
     print(factorial(5))
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "Min/Max and Const",
+            "cpp": """\
+#include <iostream>
+#include <algorithm>
+
+int main() {
+    const int a = 10;
+    int b = 20;
+    std::cout << std::min(a, b) << std::endl;
+    std::cout << std::max(a, b) << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    # const
+    a = 10
+    b = 20
+    print(min(a, b))
+    print(max(a, b))
     return 0
 
 if __name__ == "__main__":
