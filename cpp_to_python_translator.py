@@ -12,6 +12,24 @@ class CppToPythonTranslator:
         self.python_code = ""
         self.used_math = False
 
+    def _map_type_to_default(self, cpp_type):
+        if cpp_type == 'int':
+            return '0'
+        if cpp_type == 'float' or cpp_type == 'double':
+            return '0.0'
+        if cpp_type == 'string':
+            return '""'
+        if cpp_type == 'bool':
+            return 'False'
+        return 'None'
+
+    def _translate_pointer_alloc(self, match):
+        cpp_type = match.group(1)
+        var_name = match.group(2)
+        size = match.group(3)
+        default_value = self._map_type_to_default(cpp_type)
+        return f"{var_name} = [{default_value}] * {size}"
+
     def _remove_arg_types(self, match):
         args = match.group(3)
         # Remove types from arguments, e.g., "int n, string s" -> "n, s"
@@ -68,6 +86,8 @@ class CppToPythonTranslator:
             line = re.sub(r'std::cout\s*<<\s*(.*?)\s*;', r'print(\1)', line)
 
             # Type declarations
+            line = re.sub(r'(\w+)\s*\*\s*(\w+)\s*=\s*new\s+\w+\[(.*)\]', self._translate_pointer_alloc, line)
+            line = re.sub(r'delete\[\]\s*\w+;', '', line)
             line = re.sub(r'std::vector<.*?>\s+(\w+);', r'\1 = []', line)
             line = re.sub(r'std::pair<.*?>\s+(\w+);', r'\1 = (None, None)', line)
             line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*)\s*=', r'\2 =', line)
@@ -158,6 +178,30 @@ int main() {
             "python": """\
 def main():
     print("Hello, World!")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "Pointer as array",
+            "cpp": """\
+#include <iostream>
+
+int main() {
+    int* my_array = new int[10];
+    my_array[0] = 5;
+    std::cout << my_array[0] << std::endl;
+    delete[] my_array;
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    my_array = [0] * 10
+    my_array[0] = 5
+    print(my_array[0])
     return 0
 
 if __name__ == "__main__":
