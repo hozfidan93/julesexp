@@ -12,6 +12,13 @@ class CppToPythonTranslator:
         self.python_code = ""
         self.used_math = False
 
+    def _translate_find_if(self, match):
+        var_name = match.group(1)
+        vector_name = match.group(2)
+        arg_name = match.group(3)
+        condition = match.group(4)
+        return f"{var_name} = next(({arg_name} for {arg_name} in {vector_name} if {condition}), None)"
+
     def _translate_erase_remove_if(self, match):
         vector_name = match.group(1)
         arg_name = match.group(2)
@@ -81,6 +88,7 @@ class CppToPythonTranslator:
             line = re.sub(r'(\w+)\s+(\w+)\s*\((.*?)\)\s*{', self._remove_arg_types, line)
 
             # Control Structures
+            line = re.sub(r'auto\s+(\w+)\s*=\s*std::find_if\((\w+)\.begin\(\), \2\.end\(\), \[\]\(.*?\s+(\w+)\)\{\s*return\s+(.*?);\s*\}\);', self._translate_find_if, line)
             line = re.sub(r'(\w+)\.erase\(std::remove_if\(\1\.begin\(\), \1\.end\(\), \[\]\(.*?\s+(\w+)\)\{\s*return\s+(.*?);\s*\}\), \1\.end\(\)\);', self._translate_erase_remove_if, line)
             line = re.sub(r'for\s*\(\s*int\s+([a-zA-Z_]\w*)\s*=\s*(\d+);\s*\1\s*<\s*(.*?);\s*(?:\1\+\+|\+\+\1)\s*\)\s*{', r'for \1 in range(\2, \3):', line)
             line = re.sub(r'while\s*\((.*?)\)\s*{', r'while \1:', line)
@@ -113,6 +121,8 @@ class CppToPythonTranslator:
                     self.used_math = True
 
             # Operators
+            line = re.sub(r'(\w+)\s*!=\s*(\w+)\.end\(\)', r'\1 is not None', line)
+            line = re.sub(r'\*(\w+)', r'\1', line)
             line = re.sub(r'\.push_back\((.*?)\)', r'.append(\1)', line)
             line = re.sub(r'(\w+)\.size\(\)', r'len(\1)', line)
             line = re.sub(r'std::make_pair\((.*?)\)', r'(\1)', line)
@@ -185,6 +195,42 @@ int main() {
             "python": """\
 def main():
     print("Hello, World!")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "std::find_if with lambda",
+            "cpp": """\
+#include <iostream>
+#include <vector>
+#include <algorithm>
+
+int main() {
+    std::vector<int> my_vector;
+    my_vector.push_back(1);
+    my_vector.push_back(2);
+    my_vector.push_back(3);
+    my_vector.push_back(4);
+    auto it = std::find_if(my_vector.begin(), my_vector.end(), [](int i){ return i > 2; });
+    if (it != my_vector.end()) {
+        std::cout << *it << std::endl;
+    }
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    my_vector = []
+    my_vector.append(1)
+    my_vector.append(2)
+    my_vector.append(3)
+    my_vector.append(4)
+    it = next((i for i in my_vector if i > 2), None)
+    if it is not None:
+        print(it)
     return 0
 
 if __name__ == "__main__":
