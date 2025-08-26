@@ -105,7 +105,7 @@ class CppToPythonTranslator:
             line = re.sub(r'delete\[\]\s*\w+;', '', line)
             line = re.sub(r'std::vector<.*?>\s+(\w+);', r'\1 = []', line)
             line = re.sub(r'std::pair<.*?>\s+(\w+);', r'\1 = (None, None)', line)
-            line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*)\s*=', r'\2 =', line)
+            line = re.sub(r'\b(auto|int|double|float|string|bool)\s+([a-zA-Z_]\w*)\s*=', r'\2 =', line)
             line = re.sub(r'\b(int|double|float|string|bool)\s+([a-zA-Z_]\w*);', r'\2 = None', line)
 
             # Math functions
@@ -195,6 +195,27 @@ int main() {
             "python": """\
 def main():
     print("Hello, World!")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
+            "name": "auto keyword",
+            "cpp": """\
+#include <iostream>
+
+int main() {
+    auto x = 10;
+    std::cout << x << std::endl;
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    x = 10
+    print(x)
     return 0
 
 if __name__ == "__main__":
