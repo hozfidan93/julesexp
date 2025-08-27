@@ -202,6 +202,42 @@ if __name__ == "__main__":
 """
         },
         {
+            "name": "Complex nested logic",
+            "cpp": """\
+#include <iostream>
+#include <vector>
+
+int main() {
+    std::vector<int> my_vector;
+    my_vector.push_back(1);
+    my_vector.push_back(2);
+    for (int i = 0; i < my_vector.size(); ++i) {
+        if (my_vector[i] % 2 == 0) {
+            std::cout << "Even" << std::endl;
+        } else {
+            std::cout << "Odd" << std::endl;
+        }
+    }
+    return 0;
+}
+""",
+            "python": """\
+def main():
+    my_vector = []
+    my_vector.append(1)
+    my_vector.append(2)
+    for i in range(0, len(my_vector)):
+        if my_vector[i] % 2 == 0:
+            print("Even")
+        else:
+            print("Odd")
+    return 0
+
+if __name__ == "__main__":
+    main()
+"""
+        },
+        {
             "name": "auto keyword",
             "cpp": """\
 #include <iostream>
@@ -581,9 +617,20 @@ if __name__ == "__main__":
 
 
 if __name__ == "__main__":
-    if len(sys.argv) > 1 and sys.argv[1] == 'test':
-        run_tests()
+    if len(sys.argv) > 1:
+        if sys.argv[1] == 'test':
+            run_tests()
+        else:
+            # Treat the argument as a filename to translate
+            try:
+                with open(sys.argv[1], 'r') as f:
+                    cpp_code = f.read()
+                translator = CppToPythonTranslator(cpp_code)
+                python_code = translator.translate()
+                print(python_code)
+            except FileNotFoundError:
+                print(f"Error: File not found at '{sys.argv[1]}'")
+                sys.exit(1)
     else:
-        # This part will be for translating a file if needed, but for now, we'll just run tests.
         print("Running tests by default.")
         run_tests()
